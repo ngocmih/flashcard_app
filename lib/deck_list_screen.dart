@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'flashcard_screen.dart';
+import 'daily_flashcard_screen.dart';
+
 
 class DeckListScreen extends StatefulWidget {
   const DeckListScreen({super.key});
@@ -131,9 +133,29 @@ class _DeckListScreenState extends State<DeckListScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Your Decks')),
       body: ListView.builder(
-        itemCount: deckNames.length,
+        itemCount: deckNames.length + 1,
         itemBuilder: (context, index) {
-          final deckName = deckNames[index];
+          if (index == 0) {
+            // Flashcard hôm nay
+            return ListTile(
+              leading: const Icon(Icons.today),
+              title: const Text('Flashcard ngẫu nhiên hôm nay'),
+              subtitle: const Text('Ôn luyện 1 câu bất kỳ mỗi ngày'),
+              tileColor: Colors.lightBlue.shade50,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DailyFlashcardScreen(),
+                  ),
+                );
+              },
+            );
+          }
+
+          // Các bộ thẻ
+          final deckIndex = index - 1;
+          final deckName = deckNames[deckIndex];
           final cardCount = deckCounts[deckName] ?? 0;
 
           return Dismissible(
@@ -183,6 +205,7 @@ class _DeckListScreenState extends State<DeckListScreen> {
           );
         },
       ),
+
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddDeckDialog,
         child: const Icon(Icons.add),

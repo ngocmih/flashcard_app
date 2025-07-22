@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flip_card/flip_card.dart';
 import 'add_flashcard_screen.dart';
 import 'practice_screen.dart';
+import 'practice_choice_screen.dart';
+
 
 class FlashcardScreen extends StatefulWidget {
   final String deckName;
@@ -207,20 +209,43 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AddFlashcardScreen(
-                deckName: widget.deckName,
-                onAdd: _addFlashcard,
-              ),
-            ),
-          );
-        },
-        child: const Icon(Icons.add),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'multiple_choice',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PracticeChoiceScreen(flashcards: flashcards),
+                ),
+              );
+            },
+            icon: const Icon(Icons.quiz),
+            label: const Text('Trắc nghiệm'),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'add_card',
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AddFlashcardScreen(
+                    deckName: widget.deckName,
+                    onAdd: _addFlashcard,
+                  ),
+                ),
+              );
+            },
+            child: const Icon(Icons.add),
+          ),
+        ],
       ),
+
     );
   }
 }
+
