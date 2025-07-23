@@ -1,9 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'flashcard_screen.dart';
-import 'daily_flashcard_screen.dart';
-
+import 'package:flashcard_app/features/flashcard/screens/flashcard_screen.dart';
+import 'package:flashcard_app/features/daily/screens/daily_flashcard_screen.dart';
 
 class DeckListScreen extends StatefulWidget {
   const DeckListScreen({super.key});
@@ -14,11 +13,49 @@ class DeckListScreen extends StatefulWidget {
 
 class _DeckListScreenState extends State<DeckListScreen> {
   Map<String, int> deckCounts = {};
+  Map<String, String> deckIcons = {};
+
+  final List<String> iconOptions = [
+    'book', 'star', 'lightbulb', 'memory',
+    'science', 'translate', 'brush', 'code', 'travel', 'folder'
+  ];
 
   @override
   void initState() {
     super.initState();
     _loadDecks();
+  }
+
+  IconData _getIconFromName(String? iconName) {
+    switch (iconName) {
+      case 'book': return Icons.book;
+      case 'star': return Icons.star;
+      case 'lightbulb': return Icons.lightbulb;
+      case 'memory': return Icons.memory;
+      case 'science': return Icons.science;
+      case 'translate': return Icons.translate;
+      case 'brush': return Icons.brush;
+      case 'code': return Icons.code;
+      case 'travel': return Icons.flight;
+      case 'folder':
+      default: return Icons.folder;
+    }
+  }
+
+  Color _getIconColorFromName(String? iconName) {
+    switch (iconName) {
+      case 'book': return Colors.brown;
+      case 'star': return Colors.amber;
+      case 'lightbulb': return Colors.yellow.shade700;
+      case 'memory': return Colors.deepPurple;
+      case 'science': return Colors.teal;
+      case 'translate': return Colors.blue;
+      case 'brush': return Colors.pink;
+      case 'code': return Colors.green;
+      case 'travel': return Colors.indigo;
+      case 'folder':
+      default: return Colors.grey;
+    }
   }
 
   Future<void> _loadDecks() async {
@@ -29,19 +66,27 @@ class _DeckListScreenState extends State<DeckListScreen> {
       setState(() {
         deckCounts = {
           for (final entry in decoded.entries)
-            entry.key: (entry.value as List).length
+            entry.key: (entry.value['cards'] as List).length
+        };
+        deckIcons = {
+          for (final entry in decoded.entries)
+            entry.key: entry.value['icon'] ?? 'folder'
         };
       });
     }
   }
 
-  Future<void> _saveNewDeck(String name) async {
+  Future<void> _saveNewDeck(String name, String iconName) async {
     final prefs = await SharedPreferences.getInstance();
     final String? decksJson = prefs.getString('allDecks');
     final Map<String, dynamic> decoded =
     decksJson != null ? jsonDecode(decksJson) : {};
 
-    decoded[name] = []; // tạo bộ thẻ mới
+    decoded[name] = {
+      'cards': [],
+      'icon': iconName,
+    };
+
     await prefs.setString('allDecks', jsonEncode(decoded));
     _loadDecks();
   }
@@ -59,69 +104,153 @@ class _DeckListScreenState extends State<DeckListScreen> {
 
   void _showAddDeckDialog() {
     String newDeckName = '';
+    String selectedIcon = 'folder';
+
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('New Deck'),
-        content: TextField(
-          onChanged: (value) => newDeckName = value,
-          decoration: const InputDecoration(labelText: 'Deck name'),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Tạo bộ thẻ mới'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                onChanged: (value) => newDeckName = value,
+                decoration: const InputDecoration(labelText: 'Tên bộ thẻ'),
+              ),
+              const SizedBox(height: 16),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Chọn icon cho bộ thẻ:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 10,
+                children: iconOptions.map((iconName) {
+                  return GestureDetector(
+                    onTap: () => setState(() => selectedIcon = iconName),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: selectedIcon == iconName
+                              ? Colors.blue
+                              : Colors.grey.shade300,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        _getIconFromName(iconName),
+                        size: 30,
+                        color: _getIconColorFromName(iconName),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                if (newDeckName.trim().isNotEmpty) {
+                  _saveNewDeck(newDeckName.trim(), selectedIcon);
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Thêm'),
+            )
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              if (newDeckName.trim().isNotEmpty) {
-                _saveNewDeck(newDeckName.trim());
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('Add'),
-          )
-        ],
       ),
     );
   }
 
-  void _showRenameDialog(String oldName) {
-    String newName = '';
+  void _showEditDeckDialog(String oldName, String oldIcon) {
+    String newName = oldName;
+    String selectedIcon = oldIcon;
+
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Đổi tên bộ thẻ'),
-        content: TextField(
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Tên mới'),
-          onChanged: (value) => newName = value,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Huỷ'),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Sửa bộ thẻ'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                decoration: const InputDecoration(hintText: 'Tên mới'),
+                controller: TextEditingController(text: oldName),
+                onChanged: (value) => newName = value,
+              ),
+              const SizedBox(height: 12),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Chọn icon mới:', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: iconOptions.map((iconName) {
+                  return GestureDetector(
+                    onTap: () => setState(() => selectedIcon = iconName),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: selectedIcon == iconName
+                              ? Colors.blue
+                              : Colors.grey.shade300,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        _getIconFromName(iconName),
+                        size: 28,
+                        color: _getIconColorFromName(iconName),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () async {
-              if (newName.trim().isEmpty || newName == oldName) {
-                Navigator.pop(context);
-                return;
-              }
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Huỷ'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                final String? decksJson = prefs.getString('allDecks');
+                if (decksJson == null) return;
 
-              final prefs = await SharedPreferences.getInstance();
-              final data = prefs.getString('allDecks');
-              if (data != null) {
-                final decoded = jsonDecode(data) as Map<String, dynamic>;
-                if (decoded.containsKey(oldName)) {
-                  decoded[newName] = decoded[oldName];
+                final decoded = jsonDecode(decksJson) as Map<String, dynamic>;
+                if (!decoded.containsKey(oldName)) return;
+
+                final deckData = decoded[oldName];
+
+                if (newName != oldName) {
                   decoded.remove(oldName);
-                  await prefs.setString('allDecks', jsonEncode(decoded));
                 }
-              }
 
-              Navigator.pop(context);
-              _loadDecks();
-            },
-            child: const Text('Lưu'),
-          ),
-        ],
+                decoded[newName] = {
+                  'cards': deckData['cards'],
+                  'icon': selectedIcon,
+                };
+
+                await prefs.setString('allDecks', jsonEncode(decoded));
+                Navigator.pop(context);
+                _loadDecks();
+              },
+              child: const Text('Lưu'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -136,7 +265,6 @@ class _DeckListScreenState extends State<DeckListScreen> {
         itemCount: deckNames.length + 1,
         itemBuilder: (context, index) {
           if (index == 0) {
-            // Flashcard hôm nay
             return ListTile(
               leading: const Icon(Icons.today),
               title: const Text('Flashcard ngẫu nhiên hôm nay'),
@@ -153,10 +281,10 @@ class _DeckListScreenState extends State<DeckListScreen> {
             );
           }
 
-          // Các bộ thẻ
           final deckIndex = index - 1;
           final deckName = deckNames[deckIndex];
           final cardCount = deckCounts[deckName] ?? 0;
+          final iconName = deckIcons[deckName] ?? 'folder';
 
           return Dismissible(
             key: Key(deckName),
@@ -188,10 +316,14 @@ class _DeckListScreenState extends State<DeckListScreen> {
             },
             onDismissed: (_) => _deleteDeck(deckName),
             child: ListTile(
+              leading: Icon(
+                _getIconFromName(iconName),
+                color: _getIconColorFromName(iconName),
+              ),
               title: Text('$deckName ($cardCount thẻ)'),
               trailing: IconButton(
                 icon: const Icon(Icons.edit),
-                onPressed: () => _showRenameDialog(deckName),
+                onPressed: () => _showEditDeckDialog(deckName, iconName),
               ),
               onTap: () {
                 Navigator.push(
@@ -205,7 +337,6 @@ class _DeckListScreenState extends State<DeckListScreen> {
           );
         },
       ),
-
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddDeckDialog,
         child: const Icon(Icons.add),

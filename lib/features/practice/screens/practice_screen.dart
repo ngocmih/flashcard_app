@@ -158,10 +158,23 @@ class _PracticeScreenState extends State<PracticeScreen> {
               enabled: !answered,
             ),
             const SizedBox(height: 16),
-            Text(
-              feedback,
-              style: TextStyle(color: feedbackColor, fontSize: 16),
+        Container(
+          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: feedbackColor.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: feedbackColor, width: 1),
+          ),
+          child: Text(
+            feedback,
+            style: TextStyle(
+              color: feedbackColor,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
             ),
+          ),
+        ),
             const Spacer(),
             ElevatedButton(
               onPressed: answered ? _nextCard : _checkAnswer,

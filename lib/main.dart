@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'deck_list_screen.dart';
+import 'features/deck/screens/deck_list_screen.dart';
 
 void main() {
   runApp(const FlashcardApp());

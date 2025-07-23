@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flip_card/flip_card.dart';
-import 'add_flashcard_screen.dart';
-import 'practice_screen.dart';
-import 'practice_choice_screen.dart';
+import 'package:flashcard_app/features/flashcard/screens/add_flashcard_screen.dart';
+import 'package:flashcard_app/features/practice/screens/practice_screen.dart';
+import 'package:flashcard_app/features/practice/screens/practice_choice_screen.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:csv/csv.dart';
@@ -33,10 +33,11 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
     final String? decksData = prefs.getString('allDecks');
     if (decksData != null) {
       final decoded = jsonDecode(decksData) as Map<String, dynamic>;
-      final List<dynamic>? currentDeck = decoded[widget.deckName];
-      if (currentDeck != null) {
+      final deckObject = decoded[widget.deckName];
+      if (deckObject != null && deckObject['cards'] != null) {
+        final List<dynamic> cardList = deckObject['cards'];
         setState(() {
-          flashcards = currentDeck.map<Map<String, dynamic>>((item) => {
+          flashcards = cardList.map<Map<String, dynamic>>((item) => {
             'question': item['question'],
             'answer': item['answer'],
             'isLearned': item['isLearned'] ?? false,
@@ -46,14 +47,25 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
     }
   }
 
+
   Future<void> _saveFlashcards() async {
     final prefs = await SharedPreferences.getInstance();
     final String? decksData = prefs.getString('allDecks');
     final Map<String, dynamic> decoded =
     decksData != null ? jsonDecode(decksData) : {};
-    decoded[widget.deckName] = flashcards;
+
+    if (decoded.containsKey(widget.deckName)) {
+      decoded[widget.deckName]['cards'] = flashcards;
+    } else {
+      decoded[widget.deckName] = {
+        'icon': 'folder',
+        'cards': flashcards,
+      };
+    }
+
     await prefs.setString('allDecks', jsonEncode(decoded));
   }
+
 
   Future<void> _importFlashcards() async {
     final result = await FilePicker.platform.pickFiles(
