@@ -5,6 +5,9 @@ import 'package:flip_card/flip_card.dart';
 import 'add_flashcard_screen.dart';
 import 'practice_screen.dart';
 import 'practice_choice_screen.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'package:csv/csv.dart';
 
 
 class FlashcardScreen extends StatefulWidget {
@@ -51,6 +54,100 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
     decoded[widget.deckName] = flashcards;
     await prefs.setString('allDecks', jsonEncode(decoded));
   }
+
+  Future<void> _importFlashcards() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+      withData: true, // Lấy bytes nếu là Web
+    );
+
+    if (result == null || result.files.isEmpty) {
+      print('❌ Không có file nào được chọn');
+      return;
+    }
+
+    try {
+      String content;
+
+      if (result.files.single.bytes != null) {
+        print('🌐 Đang chạy trên Web, sử dụng bytes');
+        content = utf8.decode(result.files.single.bytes!);
+      } else if (result.files.single.path != null) {
+        print('📱 Đang chạy trên Mobile/Desktop, sử dụng path');
+        final file = File(result.files.single.path!);
+        content = await file.readAsString(encoding: utf8);
+      } else {
+        throw Exception('Không thể đọc nội dung file');
+      }
+
+      // Tự nhận diện kiểu xuống dòng
+      final eol = content.contains('\r\n') ? '\r\n' : '\n';
+
+      // Parse CSV với thông tin dòng
+      final rows = CsvToListConverter(eol: eol).convert(content);
+      print('📄 Tổng số dòng đọc được: ${rows.length}');
+
+      int count = 0;
+      final List<Map<String, dynamic>> newCards = [];
+
+      for (int i = 0; i < rows.length; i++) {
+        final row = rows[i];
+
+        // Bỏ qua dòng tiêu đề nếu có
+        if (i == 0 &&
+            row.length >= 2 &&
+            row[0].toString().toLowerCase().contains('question')) {
+          print('ℹ️ Bỏ qua dòng tiêu đề: $row');
+          continue;
+        }
+
+        if (row.length >= 2) {
+          final question = row[0].toString().trim();
+          final answer = row[1].toString().trim();
+
+          if (question.isNotEmpty && answer.isNotEmpty) {
+            newCards.add({
+              'question': question,
+              'answer': answer,
+              'isLearned': false,
+            });
+            print('✔ Thêm flashcard: "$question" → "$answer"');
+            count++;
+          } else {
+            print('⚠️ Bỏ qua dòng rỗng: $row');
+          }
+        } else {
+          print('⚠️ Dòng không hợp lệ: $row');
+        }
+      }
+
+      if (newCards.isNotEmpty) {
+        setState(() {
+          flashcards.addAll(newCards);
+        });
+
+        await _saveFlashcards();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('✅ Đã import $count flashcard thành công!')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('⚠️ Không có flashcard hợp lệ nào được import')),
+        );
+      }
+    } catch (e) {
+      print('❌ Lỗi khi xử lý file: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã xảy ra lỗi khi import file')),
+      );
+    }
+  }
+
+
+
+
+
 
   void _addFlashcard(String question, String answer) {
     setState(() {
@@ -143,6 +240,11 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
               );
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.upload_file),
+            tooltip: 'Import flashcard',
+            onPressed: _importFlashcards,
+          ),
         ],
       ),
       body: flashcards.isEmpty
@@ -189,6 +291,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
                           ),
                           onPressed: () => _toggleLearned(index),
                         ),
+
                       ],
                     ),
                   ),
