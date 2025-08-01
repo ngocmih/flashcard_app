@@ -1,6 +1,6 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive/hive.dart';
+import 'package:flashcard_app/data/models/deck_model.dart';
 import 'package:flashcard_app/features/flashcard/screens/flashcard_screen.dart';
 import 'package:flashcard_app/features/daily/screens/daily_flashcard_screen.dart';
 
@@ -12,8 +12,7 @@ class DeckListScreen extends StatefulWidget {
 }
 
 class _DeckListScreenState extends State<DeckListScreen> {
-  Map<String, int> deckCounts = {};
-  Map<String, String> deckIcons = {};
+  late Box<Deck> deckBox;
 
   final List<String> iconOptions = [
     'book', 'star', 'lightbulb', 'memory',
@@ -23,7 +22,7 @@ class _DeckListScreenState extends State<DeckListScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDecks();
+    deckBox = Hive.box<Deck>('decksBox');
   }
 
   IconData _getIconFromName(String? iconName) {
@@ -58,48 +57,29 @@ class _DeckListScreenState extends State<DeckListScreen> {
     }
   }
 
-  Future<void> _loadDecks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? decksJson = prefs.getString('allDecks');
-    if (decksJson != null) {
-      final Map<String, dynamic> decoded = jsonDecode(decksJson);
-      setState(() {
-        deckCounts = {
-          for (final entry in decoded.entries)
-            entry.key: (entry.value['cards'] as List).length
-        };
-        deckIcons = {
-          for (final entry in decoded.entries)
-            entry.key: entry.value['icon'] ?? 'folder'
-        };
-      });
+  void _addDeck(String name, String iconName) {
+    final newDeck = Deck(title: name, iconName: iconName, flashcards: []);
+    deckBox.put(name, newDeck);
+    setState(() {});
+  }
+
+  void _editDeck(String oldName, String newName, String newIcon) {
+    final oldDeck = deckBox.get(oldName);
+    if (oldDeck != null) {
+      final updatedDeck = Deck(
+        title: newName,
+        iconName: newIcon,
+        flashcards: oldDeck.flashcards,
+      );
+      deckBox.delete(oldName);
+      deckBox.put(newName, updatedDeck);
+      setState(() {});
     }
   }
 
-  Future<void> _saveNewDeck(String name, String iconName) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? decksJson = prefs.getString('allDecks');
-    final Map<String, dynamic> decoded =
-    decksJson != null ? jsonDecode(decksJson) : {};
-
-    decoded[name] = {
-      'cards': [],
-      'icon': iconName,
-    };
-
-    await prefs.setString('allDecks', jsonEncode(decoded));
-    _loadDecks();
-  }
-
-  Future<void> _deleteDeck(String name) async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? decksJson = prefs.getString('allDecks');
-    if (decksJson != null) {
-      final Map<String, dynamic> decoded = jsonDecode(decksJson);
-      decoded.remove(name);
-      await prefs.setString('allDecks', jsonEncode(decoded));
-      _loadDecks();
-    }
+  void _deleteDeck(String name) {
+    deckBox.delete(name);
+    setState(() {});
   }
 
   void _showAddDeckDialog() {
@@ -157,7 +137,7 @@ class _DeckListScreenState extends State<DeckListScreen> {
             TextButton(
               onPressed: () {
                 if (newDeckName.trim().isNotEmpty) {
-                  _saveNewDeck(newDeckName.trim(), selectedIcon);
+                  _addDeck(newDeckName.trim(), selectedIcon);
                 }
                 Navigator.pop(context);
               },
@@ -224,28 +204,9 @@ class _DeckListScreenState extends State<DeckListScreen> {
               child: const Text('Huỷ'),
             ),
             TextButton(
-              onPressed: () async {
-                final prefs = await SharedPreferences.getInstance();
-                final String? decksJson = prefs.getString('allDecks');
-                if (decksJson == null) return;
-
-                final decoded = jsonDecode(decksJson) as Map<String, dynamic>;
-                if (!decoded.containsKey(oldName)) return;
-
-                final deckData = decoded[oldName];
-
-                if (newName != oldName) {
-                  decoded.remove(oldName);
-                }
-
-                decoded[newName] = {
-                  'cards': deckData['cards'],
-                  'icon': selectedIcon,
-                };
-
-                await prefs.setString('allDecks', jsonEncode(decoded));
+              onPressed: () {
+                _editDeck(oldName, newName, selectedIcon);
                 Navigator.pop(context);
-                _loadDecks();
               },
               child: const Text('Lưu'),
             ),
@@ -257,7 +218,7 @@ class _DeckListScreenState extends State<DeckListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final deckNames = deckCounts.keys.toList();
+    final deckNames = deckBox.keys.cast<String>().toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Your Decks')),
@@ -281,10 +242,10 @@ class _DeckListScreenState extends State<DeckListScreen> {
             );
           }
 
-          final deckIndex = index - 1;
-          final deckName = deckNames[deckIndex];
-          final cardCount = deckCounts[deckName] ?? 0;
-          final iconName = deckIcons[deckName] ?? 'folder';
+          final deckName = deckNames[index - 1];
+          final deck = deckBox.get(deckName);
+
+          if (deck == null) return const SizedBox();
 
           return Dismissible(
             key: Key(deckName),
@@ -317,19 +278,19 @@ class _DeckListScreenState extends State<DeckListScreen> {
             onDismissed: (_) => _deleteDeck(deckName),
             child: ListTile(
               leading: Icon(
-                _getIconFromName(iconName),
-                color: _getIconColorFromName(iconName),
+                _getIconFromName(deck.iconName),
+                color: _getIconColorFromName(deck.iconName),
               ),
-              title: Text('$deckName ($cardCount thẻ)'),
+              title: Text('${deck.title} (${deck.flashcards.length} thẻ)'),
               trailing: IconButton(
                 icon: const Icon(Icons.edit),
-                onPressed: () => _showEditDeckDialog(deckName, iconName),
+                onPressed: () => _showEditDeckDialog(deck.title, deck.iconName),
               ),
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => FlashcardScreen(deckName: deckName),
+                    builder: (_) => FlashcardScreen(deckName: deck.title),
                   ),
                 );
               },

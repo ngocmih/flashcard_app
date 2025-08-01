@@ -1,14 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flip_card/flip_card.dart';
+import 'package:flashcard_app/core/services/flashcard_service.dart';
+import 'package:flashcard_app/data/models/flashcard_model.dart';
 import 'package:flashcard_app/features/flashcard/screens/add_flashcard_screen.dart';
-import 'package:flashcard_app/features/practice/screens/practice_screen.dart';
 import 'package:flashcard_app/features/practice/screens/practice_choice_screen.dart';
-import 'package:file_picker/file_picker.dart';
-import 'dart:io';
-import 'package:csv/csv.dart';
-
+import 'package:flashcard_app/features/practice/screens/practice_screen.dart';
 
 class FlashcardScreen extends StatefulWidget {
   final String deckName;
@@ -20,7 +16,10 @@ class FlashcardScreen extends StatefulWidget {
 }
 
 class _FlashcardScreenState extends State<FlashcardScreen> {
-  List<Map<String, dynamic>> flashcards = [];
+  List<Flashcard> flashcards = [];
+  List<Flashcard> filteredFlashcards = [];
+  final TextEditingController _searchController = TextEditingController();
+  final FlashcardService _flashcardService = FlashcardService();
 
   @override
   void initState() {
@@ -29,155 +28,85 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
   }
 
   Future<void> _loadFlashcards() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? decksData = prefs.getString('allDecks');
-    if (decksData != null) {
-      final decoded = jsonDecode(decksData) as Map<String, dynamic>;
-      final deckObject = decoded[widget.deckName];
-      if (deckObject != null && deckObject['cards'] != null) {
-        final List<dynamic> cardList = deckObject['cards'];
-        setState(() {
-          flashcards = cardList.map<Map<String, dynamic>>((item) => {
-            'question': item['question'],
-            'answer': item['answer'],
-            'isLearned': item['isLearned'] ?? false,
-          }).toList();
-        });
-      }
-    }
+    final cards = await _flashcardService.loadFlashcards(widget.deckName);
+    setState(() {
+      flashcards = cards;
+      filteredFlashcards = List.from(cards);
+    });
   }
-
 
   Future<void> _saveFlashcards() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? decksData = prefs.getString('allDecks');
-    final Map<String, dynamic> decoded =
-    decksData != null ? jsonDecode(decksData) : {};
-
-    if (decoded.containsKey(widget.deckName)) {
-      decoded[widget.deckName]['cards'] = flashcards;
-    } else {
-      decoded[widget.deckName] = {
-        'icon': 'folder',
-        'cards': flashcards,
-      };
-    }
-
-    await prefs.setString('allDecks', jsonEncode(decoded));
+    await _flashcardService.saveFlashcards(widget.deckName, flashcards);
   }
 
-
-  Future<void> _importFlashcards() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['csv'],
-      withData: true,
-    );
-
-    if (result == null || result.files.isEmpty) {
-      print('No file selected.');
-      return;
-    }
-
-    try {
-      String content;
-
-      if (result.files.single.bytes != null) {
-        print('Running on Web – reading file from bytes.');
-        content = utf8.decode(result.files.single.bytes!);
-      } else if (result.files.single.path != null) {
-        print('Running on Mobile/Desktop – reading file from path.');
-        final file = File(result.files.single.path!);
-        content = await file.readAsString(encoding: utf8);
+  void _searchFlashcards(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        filteredFlashcards = List.from(flashcards);
       } else {
-        throw Exception('Unable to read file content.');
+        filteredFlashcards = flashcards.where((card) {
+          final q = card.question.toLowerCase();
+          final a = card.answer.toLowerCase();
+          return q.contains(query.toLowerCase()) ||
+              a.contains(query.toLowerCase());
+        }).toList();
       }
-
-      // Detect line endings
-      final eol = content.contains('\r\n') ? '\r\n' : '\n';
-
-      final rows = CsvToListConverter(eol: eol).convert(content);
-      print('Total rows read: ${rows.length}');
-
-      int count = 0;
-      final List<Map<String, dynamic>> newCards = [];
-
-      for (int i = 0; i < rows.length; i++) {
-        final row = rows[i];
-
-        if (i == 0 &&
-            row.length >= 2 &&
-            row[0].toString().toLowerCase().contains('question')) {
-          print('Skipped header row: $row');
-          continue;
-        }
-
-        if (row.length >= 2) {
-          final question = row[0].toString().trim();
-          final answer = row[1].toString().trim();
-
-          if (question.isNotEmpty && answer.isNotEmpty) {
-            newCards.add({
-              'question': question,
-              'answer': answer,
-              'isLearned': false,
-            });
-            print('Added flashcard: "$question" → "$answer"');
-            count++;
-          } else {
-            print('Skipped empty or invalid row: $row');
-          }
-        } else {
-          print('Invalid row (less than 2 columns): $row');
-        }
-      }
-
-      if (newCards.isNotEmpty) {
-        setState(() {
-          flashcards.addAll(newCards);
-        });
-
-        await _saveFlashcards();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Successfully imported $count flashcards.')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No valid flashcards found in the file.')),
-        );
-      }
-    } catch (e) {
-      print('Error while processing file: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('An error occurred while importing the file.')),
-      );
-    }
+    });
   }
-
 
   void _addFlashcard(String question, String answer) {
     setState(() {
-      flashcards.add({
-        'question': question,
-        'answer': answer,
-        'isLearned': false,
-      });
+      flashcards.add(
+          Flashcard(question: question, answer: answer, isLearned: false));
+      filteredFlashcards = List.from(flashcards);
     });
     _saveFlashcards();
   }
 
   void _removeFlashcard(int index) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Xoá thẻ?'),
+        content: const Text('Bạn có chắc muốn xoá flashcard này không?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Huỷ'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                flashcards.removeAt(index);
+                filteredFlashcards = List.from(flashcards);
+              });
+              _saveFlashcards();
+              Navigator.pop(context);
+            },
+            child: const Text('Xoá'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _toggleLearned(int index) {
     setState(() {
-      flashcards.removeAt(index);
+      flashcards[index] = Flashcard(
+        question: flashcards[index].question,
+        answer: flashcards[index].answer,
+        isLearned: !flashcards[index].isLearned,
+      );
+      filteredFlashcards = List.from(flashcards);
     });
     _saveFlashcards();
   }
 
   void _showEditDialog(int index) {
     final questionController =
-    TextEditingController(text: flashcards[index]['question']);
+    TextEditingController(text: flashcards[index].question);
     final answerController =
-    TextEditingController(text: flashcards[index]['answer']);
+    TextEditingController(text: flashcards[index].answer);
 
     showDialog(
       context: context,
@@ -207,8 +136,12 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
               final answer = answerController.text.trim();
               if (question.isNotEmpty && answer.isNotEmpty) {
                 setState(() {
-                  flashcards[index]['question'] = question;
-                  flashcards[index]['answer'] = answer;
+                  flashcards[index] = Flashcard(
+                    question: question,
+                    answer: answer,
+                    isLearned: flashcards[index].isLearned,
+                  );
+                  filteredFlashcards = List.from(flashcards);
                 });
                 _saveFlashcards();
               }
@@ -221,11 +154,10 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
     );
   }
 
-  void _toggleLearned(int index) {
-    setState(() {
-      flashcards[index]['isLearned'] = !(flashcards[index]['isLearned'] ?? false);
-    });
-    _saveFlashcards();
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -245,11 +177,6 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
                 ),
               );
             },
-          ),
-          IconButton(
-            icon: const Icon(Icons.upload_file),
-            tooltip: 'Import flashcard',
-            onPressed: _importFlashcards,
           ),
         ],
       ),
@@ -272,12 +199,13 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: FlipCard(
+                direction: FlipDirection.VERTICAL,
                 front: Card(
-                  color: flashcard['isLearned'] == true
+                  color: flashcard.isLearned
                       ? Colors.green.shade100
                       : null,
                   child: ListTile(
-                    title: Text(flashcard['question'] ?? ''),
+                    title: Text(flashcard.question),
                     subtitle: const Text('Tap to see answer'),
                     trailing: Wrap(
                       spacing: 4,
@@ -288,26 +216,25 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
                         ),
                         IconButton(
                           icon: Icon(
-                            flashcard['isLearned'] == true
+                            flashcard.isLearned
                                 ? Icons.check_circle
                                 : Icons.check_circle_outline,
-                            color: flashcard['isLearned'] == true
+                            color: flashcard.isLearned
                                 ? Colors.green
                                 : Colors.grey,
                           ),
                           onPressed: () => _toggleLearned(index),
                         ),
-
                       ],
                     ),
                   ),
                 ),
                 back: Card(
-                  color: flashcard['isLearned'] == true
+                  color: flashcard.isLearned
                       ? Colors.green.shade100
                       : Colors.teal.shade100,
                   child: ListTile(
-                    title: Text(flashcard['answer'] ?? '',
+                    title: Text(flashcard.answer,
                         style: const TextStyle(
                             fontWeight: FontWeight.bold)),
                     subtitle: const Text('Tap to go back'),
@@ -353,8 +280,6 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
           ),
         ],
       ),
-
     );
   }
 }
-

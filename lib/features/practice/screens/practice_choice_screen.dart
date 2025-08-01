@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flashcard_app/data/models/flashcard_model.dart';
 
 class PracticeChoiceScreen extends StatefulWidget {
-  final List<Map<String, dynamic>> flashcards;
+  final List<Flashcard> flashcards;
 
   const PracticeChoiceScreen({super.key, required this.flashcards});
 
@@ -12,7 +13,7 @@ class PracticeChoiceScreen extends StatefulWidget {
 }
 
 class _PracticeChoiceScreenState extends State<PracticeChoiceScreen> {
-  late List<Map<String, dynamic>> shuffled;
+  late List<Flashcard> shuffled;
   int currentIndex = 0;
   int correctCount = 0;
   bool answered = false;
@@ -30,13 +31,13 @@ class _PracticeChoiceScreenState extends State<PracticeChoiceScreen> {
   }
 
   void _generateOptions() {
-    final correct = (shuffled[currentIndex]['answer'] ?? '') as String;
-    final allAnswers = widget.flashcards.map((e) => e['answer'] ?? '').toSet().toList();
+    final correct = shuffled[currentIndex].answer;
+    final allAnswers = widget.flashcards.map((e) => e.answer).toSet().toList();
 
     allAnswers.remove(correct);
     allAnswers.shuffle();
 
-    options = [correct, ...allAnswers.take(3).cast<String>()];
+    options = [correct, ...allAnswers.take(3)].cast<String>();
     options.shuffle();
     answered = false;
     selectedIndex = null;
@@ -45,7 +46,7 @@ class _PracticeChoiceScreenState extends State<PracticeChoiceScreen> {
   void _selectAnswer(int index) {
     if (answered) return;
 
-    final isCorrect = options[index] == shuffled[currentIndex]['answer'];
+    final isCorrect = options[index] == shuffled[currentIndex].answer;
     setState(() {
       selectedIndex = index;
       answered = true;
@@ -89,6 +90,7 @@ class _PracticeChoiceScreenState extends State<PracticeChoiceScreen> {
       message = 'Xuất sắc! Bạn thật tuyệt vời! 🌟';
     }
 
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -113,8 +115,8 @@ class _PracticeChoiceScreenState extends State<PracticeChoiceScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context); // đóng dialog
-              Navigator.pop(context); // quay về màn chính
+              Navigator.pop(context);
+              Navigator.pop(context);
             },
             child: const Text('Đóng'),
           ),
@@ -125,8 +127,8 @@ class _PracticeChoiceScreenState extends State<PracticeChoiceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final question = shuffled[currentIndex]['question'] ?? '';
-    final answer = shuffled[currentIndex]['answer'] ?? '';
+    final question = shuffled[currentIndex].question;
+    final answer = shuffled[currentIndex].answer;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Luyện tập trắc nghiệm')),
@@ -146,8 +148,6 @@ class _PracticeChoiceScreenState extends State<PracticeChoiceScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Các lựa chọn
             ...List.generate(options.length, (i) {
               final isCorrect = options[i] == answer;
               Color? color;
@@ -158,10 +158,7 @@ class _PracticeChoiceScreenState extends State<PracticeChoiceScreen> {
                   color = Colors.green.withOpacity(0.5);
                 }
               }
-
               final choiceButton = _buildChoiceButton(i, color, isCorrect);
-
-              // Nếu sai và đã chọn => rung
               if (i == selectedIndex && answered && !isCorrect) {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
@@ -170,12 +167,10 @@ class _PracticeChoiceScreenState extends State<PracticeChoiceScreen> {
                     child: choiceButton,
                   ),
                 );
-
               } else {
                 return choiceButton;
               }
             }),
-
             const Spacer(),
             ElevatedButton(
               onPressed: answered ? _next : null,

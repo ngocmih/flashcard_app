@@ -1,9 +1,10 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive/hive.dart';
+import 'package:flashcard_app/data/models/flashcard_model.dart';
 
 class PracticeScreen extends StatefulWidget {
-  final List<Map<String, dynamic>> flashcards;
+  final List<Flashcard> flashcards;
 
   const PracticeScreen({super.key, required this.flashcards});
 
@@ -12,7 +13,7 @@ class PracticeScreen extends StatefulWidget {
 }
 
 class _PracticeScreenState extends State<PracticeScreen> {
-  late List<Map<String, dynamic>> shuffledCards;
+  late List<Flashcard> shuffledCards;
   int currentIndex = 0;
   int correctCount = 0;
   final TextEditingController _controller = TextEditingController();
@@ -24,12 +25,12 @@ class _PracticeScreenState extends State<PracticeScreen> {
   void initState() {
     super.initState();
     shuffledCards = [...widget.flashcards];
-    shuffledCards.shuffle(Random()); // ✅ Shuffle ngẫu nhiên khi bắt đầu
+    shuffledCards.shuffle(Random());
   }
 
   void _checkAnswer() {
     final userInput = _controller.text.trim().toLowerCase();
-    final correctAnswer = (shuffledCards[currentIndex]['answer'] ?? '').trim().toLowerCase();
+    final correctAnswer = shuffledCards[currentIndex].answer.trim().toLowerCase();
 
     setState(() {
       if (userInput == correctAnswer) {
@@ -37,7 +38,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
         feedbackColor = Colors.green;
         correctCount++;
       } else {
-        feedback = '❌ Sai! Đáp án: ${shuffledCards[currentIndex]['answer']}';
+        feedback = '❌ Sai! Đáp án: ${shuffledCards[currentIndex].answer}';
         feedbackColor = Colors.red;
       }
       answered = true;
@@ -63,14 +64,13 @@ class _PracticeScreenState extends State<PracticeScreen> {
     final percent = (correctCount / total * 100).toStringAsFixed(1);
     final percentDouble = double.parse(percent);
 
-    final prefs = await SharedPreferences.getInstance();
-    final lastCorrect = prefs.getInt('last_correct') ?? -1;
-    final lastTotal = prefs.getInt('last_total') ?? -1;
+    final box = await Hive.openBox('practice_stats');
+    final lastCorrect = box.get('last_correct', defaultValue: -1);
+    final lastTotal = box.get('last_total', defaultValue: -1);
 
-    // Lưu kết quả hiện tại
-    await _saveLastResult(correctCount, total);
+    await box.put('last_correct', correctCount);
+    await box.put('last_total', total);
 
-    // Nhận xét theo hiệu suất mới
     String message;
     if (percentDouble < 50) {
       message = 'Đừng nản! Bạn sẽ tiến bộ nếu chăm chỉ hơn 💪';
@@ -80,7 +80,6 @@ class _PracticeScreenState extends State<PracticeScreen> {
       message = 'Xuất sắc! Bạn thật tuyệt vời! 🌟';
     }
 
-    // So sánh với kết quả trước (nếu có)
     if (lastCorrect >= 0 && lastTotal > 0) {
       final lastPercent = lastCorrect / lastTotal * 100;
       if (percentDouble > lastPercent) {
@@ -92,7 +91,8 @@ class _PracticeScreenState extends State<PracticeScreen> {
       }
     }
 
-    // Hiện kết quả + lời nhận xét
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -110,8 +110,8 @@ class _PracticeScreenState extends State<PracticeScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context); // đóng dialog
-              Navigator.pop(context); // quay về màn chính
+              Navigator.pop(context);
+              Navigator.pop(context);
             },
             child: const Text('Đóng'),
           ),
@@ -119,7 +119,6 @@ class _PracticeScreenState extends State<PracticeScreen> {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -143,7 +142,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  flashcard['question'] ?? '',
+                  flashcard.question,
                   style: const TextStyle(fontSize: 20),
                 ),
               ),
@@ -158,23 +157,23 @@ class _PracticeScreenState extends State<PracticeScreen> {
               enabled: !answered,
             ),
             const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(12),
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: feedbackColor.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: feedbackColor, width: 1),
-          ),
-          child: Text(
-            feedback,
-            style: TextStyle(
-              color: feedbackColor,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: feedbackColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: feedbackColor, width: 1),
+              ),
+              child: Text(
+                feedback,
+                style: TextStyle(
+                  color: feedbackColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-          ),
-        ),
             const Spacer(),
             ElevatedButton(
               onPressed: answered ? _nextCard : _checkAnswer,
@@ -185,9 +184,4 @@ class _PracticeScreenState extends State<PracticeScreen> {
       ),
     );
   }
-}
-Future<void> _saveLastResult(int correct, int total) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt('last_correct', correct);
-  await prefs.setInt('last_total', total);
 }
