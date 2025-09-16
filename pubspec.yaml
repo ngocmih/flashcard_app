@@ -30,10 +30,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  shared_preferences: ^2.2.2
+
   flip_card: ^0.7.0
   flutter_native_splash: ^2.3.5
-  file_picker: ^6.1.1
+  #file_picker: ^6.1.1
   csv: ^5.0.2
   audioplayers: ^5.2.1
   flutter_animate: ^4.5.0
@@ -41,6 +41,12 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   path_provider: ^2.1.2
+
+  file_picker: ^8.0.3
+
+  flutter_bloc: ^9.0.0
+  equatable: ^2.0.5
+  hydrated_bloc: ^10.0.0
 
 
   # The following adds the Cupertino Icons font to your application.

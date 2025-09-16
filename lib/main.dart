@@ -1,37 +1,43 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'core/router/app_router.dart';
+import 'data/datasources/local/hive_boxes.dart';
+import 'data/repositories/deck_repository_impl.dart';
+import 'domain/repositories/deck_repository.dart';
+import 'features/deck/bloc/deck_bloc.dart';
 
-import 'data/models/flashcard_model.dart';
-import 'data/models/deck_model.dart';
-import 'features/deck/screens/deck_list_screen.dart';
 
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await _initHive();
+  await HiveBoxes.init();
 
-  runApp(const FlashcardApp());
+
+  final DeckRepository deckRepo = DeckRepositoryImpl();
+
+
+  runApp(MyApp(deckRepo: deckRepo));
 }
 
-Future<void> _initHive() async {
-  await Hive.initFlutter();
-  Hive.registerAdapter(FlashcardAdapter());
-  Hive.registerAdapter(DeckAdapter());
-  await Hive.openBox<Deck>('decksBox');
-}
 
-class FlashcardApp extends StatelessWidget {
-  const FlashcardApp({super.key});
+class MyApp extends StatelessWidget {
+  final DeckRepository deckRepo;
+  const MyApp({super.key, required this.deckRepo});
+
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flashcard App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.teal,
-        useMaterial3: true,
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => DeckBloc(deckRepo)),
+// BlocProvider(create: (_) => FlashcardBloc(flashRepo)),
+// BlocProvider(create: (_) => PracticeBloc(flashRepo)),
+      ],
+      child: MaterialApp(
+        title: 'Flashcard App',
+        home: const DeckListScreen(),
+        onGenerateRoute: AppRouter.onGenerateRoute,
       ),
-      home: const DeckListScreen(),
     );
   }
 }
